@@ -46,7 +46,7 @@ def main():
                     result = future.result()
                     if result is not None:
                         print(result)
-                        break
+                        return
                     pbar.update(1)
 
 if __name__ == '__main__':
