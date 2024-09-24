@@ -25,3 +25,4 @@ sp_core = { package = "sp-core", version = "34.0.0", default-features = false, f
 ] }
 itertools = { version = "0.13.0" }
 permutations = { version = "0.1.1" }
+indicatif = "0.17.8"

@@ -1,7 +1,7 @@
 use codec::{Decode, Encode};
-use sp_core::{sr25519, Pair};
 use itertools::Itertools;
-use permutations;
+use sp_core::{sr25519, Pair};
+use std::iter::once;
 
 use pyo3::prelude::*;
 
@@ -57,7 +57,6 @@ pub struct Permutation {
     inner: permutations::Permutation,
 }
 
-
 impl IntoIterator for Permutations {
     type Item = Permutation;
     type IntoIter = Iter;
@@ -106,16 +105,17 @@ impl Iterator for Iter {
 }
 impl ExactSizeIterator for Iter {}
 
-
-
-
 #[pymodule(name = "bt_crack")]
 mod bt_crack {
+    use indicatif::ProgressBar;
     use sp_core::crypto::Ss58Codec;
 
     use super::*;
 
-    fn to_pub_key(mnemonic: Vec<String>) -> Option<sr25519::Public> {
+    const MNEMONIC_SIZE: usize = 12;
+    const DICT_SIZE: usize = 2048;
+
+    fn to_pub_key(mnemonic: &[&str; MNEMONIC_SIZE]) -> Option<sr25519::Public> {
         let seed = mnemonic.join(" ");
         let maybe_pair = sr25519::Pair::from_string(&seed, None);
         let pair = match maybe_pair {
@@ -126,51 +126,198 @@ mod bt_crack {
 
         Some(public)
     }
-    
+
     #[allow(dead_code)]
-    fn to_ss58_addr(mnemonic: Vec<String>) -> Option<String> {
+    fn to_ss58_addr(mnemonic: &[&str; MNEMONIC_SIZE]) -> Option<String> {
         let public = to_pub_key(mnemonic)?;
 
         Some(public.to_ss58check())
     }
 
     #[pyfunction(name = "crack")]
-    pub fn py_crack(_dictionary: Vec<String>, mnemonic: Vec<String>, target: [u8; 32], start: u128, batch_size: u128) -> PyResult<Option<Vec<String>>> {
-        let mut result = None;
+    pub fn py_crack(
+        _dictionary: [String; DICT_SIZE],
+        mnemonic: [String; MNEMONIC_SIZE],
+        target: [u8; 32],
+        start: u128,
+        batch_size: u128,
+    ) -> PyResult<Option<Vec<String>>> {
+        let mnemonic: &[&str; MNEMONIC_SIZE] = &mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
 
         let perms = Permutations::new(mnemonic.len());
 
         for perm in perms.iter().skip(start as usize).take(batch_size as usize) {
-            let combo = perm.inner.permute(&mnemonic);
-            let pub_key = to_pub_key(combo.clone());
-            if pub_key.clone().is_some_and(|x| x.0 == target) {
-                result = Some(combo);
-                break;
+            let combo = perm.inner.permute(mnemonic).try_into().unwrap();
+            let pub_key = to_pub_key(&combo);
+            if pub_key.is_some_and(|x| x.0 == target) {
+                return Ok(Some(
+                    combo
+                        .iter()
+                        .map(|&x| x.to_string())
+                        .collect::<Vec<String>>(),
+                ));
             }
         }
 
-        Ok(result)
+        Ok(None)
     }
 
     #[pyfunction(name = "try_pair_permutations")]
-    pub fn py_try_pair_permutations(mnemonic: Vec<String>, target: [u8; 32], start: u128, batch_size: u128) -> PyResult<Option<Vec<String>>> {
-        let mut result = None;
+    pub fn py_try_pair_permutations(
+        mnemonic: [String; MNEMONIC_SIZE],
+        target: [u8; 32],
+        start: u128,
+        batch_size: u128,
+    ) -> PyResult<Option<Vec<String>>> {
+        let mnemonic: [&str; MNEMONIC_SIZE] = mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
         let indices = (1..mnemonic.len()).collect::<Vec<usize>>();
 
-        for perm in indices.iter().permutations(2).skip(start as usize).take(batch_size as usize) {
-            let mut combo = mnemonic.clone();
+        for perm in indices
+            .iter()
+            .permutations(2)
+            .skip(start as usize)
+            .take(batch_size as usize)
+        {
+            let mut combo = mnemonic;
             let (first, second) = (*perm[0], *perm[1]);
-            let temp = combo[first].clone();
-            combo[first] = combo[second].clone();
-            combo[second] = temp;
+            combo.swap(first, second);
 
-            let pub_key = to_pub_key(combo.clone());
-            if pub_key.clone().is_some_and(|x| x.0 == target) {
-                result = Some(combo);
-                break;
+            let pub_key = to_pub_key(&combo);
+            if pub_key.is_some_and(|x| x.0 == target) {
+                return Ok(Some(
+                    combo
+                        .iter()
+                        .map(|&x| x.to_string())
+                        .collect::<Vec<String>>(),
+                ));
             }
         }
 
-        Ok(result)
+        Ok(None)
+    }
+
+    fn loop_over_replaced_word<'a>(
+        dictionary: &[&'a str; 2048],
+        mnemonic: &[&'a str; MNEMONIC_SIZE],
+        &index: &usize,
+        target: [u8; 32],
+        pb: Option<&ProgressBar>,
+    ) -> Option<Vec<&'a str>> {
+        let replaced_word = mnemonic[index];
+        let left = &mnemonic[..index];
+        let right = &mnemonic[index + 1..];
+
+        for &word in dictionary {
+            if pb.is_some() {
+                pb?.inc(DICT_SIZE as u64);
+            }
+            if *word == *replaced_word {
+                continue;
+            }
+
+            let mut joined = left.iter().chain(once(&word)).chain(right.iter());
+            let joined = std::array::from_fn(|_| *joined.next().unwrap());
+            let pub_key = to_pub_key(&joined);
+            if pub_key.is_some_and(|x| x.0 == target) {
+                return Some(joined.to_vec());
+            }
+        }
+
+        None
+    }
+
+    fn loop_over_replaced_words<'a>(
+        dictionary: &[&'a str; 2048],
+        mnemonic: &[&'a str; MNEMONIC_SIZE],
+        indices: &[&usize],
+        target: [u8; 32],
+        pb: Option<&ProgressBar>,
+    ) -> Option<Vec<&'a str>> {
+        if indices.len() == 1 {
+            return loop_over_replaced_word(dictionary, mnemonic, indices[0], target, pb);
+        }
+
+        let &next_ind = indices[0];
+        let new_indices = &indices[1..];
+
+        let &replaced_word = &mnemonic[next_ind];
+
+        let left = &mnemonic[..next_ind];
+        let right = &mnemonic[next_ind + 1..];
+
+        for &word in dictionary {
+            if *word == *replaced_word {
+                continue;
+            }
+
+            let mut joined = left.iter().chain(once(&word)).chain(right.iter());
+            let joined = std::array::from_fn(|_| *joined.next().unwrap());
+            let result = loop_over_replaced_words(dictionary, &joined, new_indices, target, pb);
+            if result.is_some() {
+                return result;
+            }
+        }
+
+        None
+    }
+
+    fn factorial(n: u128) -> u128 {
+        (1..=n).product()
+    }
+
+    fn count_combinations(n: u128, r: u128) -> u128 {
+        factorial(n) / (factorial(r) * factorial(n - r))
+    }
+
+    #[pyfunction(name = "try_k_replacements")]
+    pub fn py_try_k_replacements(
+        dictionary: Vec<String>,
+        mnemonic: Vec<String>,
+        target: [u8; 32],
+        k: usize,
+    ) -> PyResult<Option<Vec<String>>> {
+        let indices = (1..mnemonic.len()).collect::<Vec<usize>>();
+        let dictionary = dictionary
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+        let mnemonic = mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+
+        let combos = count_combinations(MNEMONIC_SIZE as u128, k as u128)
+            * u128::pow(DICT_SIZE as u128, k as u32);
+        let pb = ProgressBar::new(combos as u64);
+        for comb in indices.iter().combinations(k) {
+            let result = loop_over_replaced_words(&dictionary, &mnemonic, &comb, target, Some(&pb));
+            match result {
+                Some(output) => {
+                    return Ok(Some(
+                        output
+                            .iter()
+                            .map(|&x| x.to_string())
+                            .collect::<Vec<String>>(),
+                    ))
+                }
+                _ => continue,
+            }
+        }
+
+        Ok(None)
     }
 }
