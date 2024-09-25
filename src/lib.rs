@@ -110,7 +110,7 @@ mod bt_crack {
     use linya::{Bar, Progress};
     use rayon::prelude::*;
     use sp_core::crypto::Ss58Codec;
-    use std::sync::Mutex;
+    use std::{iter::zip, sync::Mutex};
 
     use super::*;
 
@@ -220,25 +220,23 @@ mod bt_crack {
         let left = &mnemonic[..index];
         let right = &mnemonic[index + 1..];
 
-        let result = dictionary
-            .par_iter()
-            .find_map_any(|&word| {
-                if *word == *replaced_word {
-                    return None;
-                }
+        let result = dictionary.par_iter().find_map_any(|&word| {
+            if *word == *replaced_word {
+                return None;
+            }
 
-                let mut joined = left.iter().chain(once(&word)).chain(right.iter());
-                let joined = std::array::from_fn(|_| *joined.next().unwrap());
-                let pub_key = to_pub_key(&joined);
-                let inner_result: Option<Vec<&str>> = if pub_key.is_some_and(|x| x.0 == target) {
-                    Some(joined.to_vec())
-                } else {
-                    None
-                };
+            let mut joined = left.iter().chain(once(&word)).chain(right.iter());
+            let joined = std::array::from_fn(|_| *joined.next().unwrap());
+            let pub_key = to_pub_key(&joined);
+            let inner_result: Option<Vec<&str>> = if pub_key.is_some_and(|x| x.0 == target) {
+                Some(joined.to_vec())
+            } else {
+                None
+            };
 
-                progress.lock().unwrap().inc_and_draw(bar, 1);
-                inner_result
-            });
+            progress.lock().unwrap().inc_and_draw(bar, 1);
+            inner_result
+        });
 
         result
     }
@@ -265,39 +263,60 @@ mod bt_crack {
         let left = &mnemonic[..next_ind];
         let right = &mnemonic[next_ind + 1..];
 
+        let result = dictionary.par_iter().find_map_any(|&word| {
+            if *word == *replaced_word {
+                return None;
+            }
+
+            let mut joined = left.iter().chain(once(&word)).chain(right.iter());
+            let joined = std::array::from_fn(|_| *joined.next().unwrap());
+            let result =
+                loop_over_replaced_words(dictionary, &joined, new_indices, target, progress, bar);
+            if result.is_some() {
+                return result;
+            }
+            None
+        });
+
+        result
+    }
+
+    fn iter_over_replaced_words<'a>(
+        dictionary: &[&'a str; 2048],
+        mnemonic: &[&'a str; MNEMONIC_SIZE],
+        indices: &[&usize],
+        target: [u8; 32],
+    ) -> Option<Vec<&'a str>> {
         let result = dictionary
-            .par_iter()
-            .find_map_any(|&word| {
-                if *word == *replaced_word {
-                    return None;
+            .iter()
+            .combinations_with_replacement(indices.len())
+            .par_bridge()
+            .find_map_any(|comb| {
+                let mut new_mnemonic = *mnemonic;
+                for (&index, &new_word) in zip(indices.iter(), comb.iter()) {
+                    new_mnemonic[*index] = *new_word;
                 }
 
-                let mut joined = left.iter().chain(once(&word)).chain(right.iter());
-                let joined = std::array::from_fn(|_| *joined.next().unwrap());
-                let result = loop_over_replaced_words(
-                    dictionary,
-                    &joined,
-                    new_indices,
-                    target,
-                    progress,
-                    bar,
-                );
-                if result.is_some() {
-                    return result;
-                }
-                None
+                let pub_key = to_pub_key(&new_mnemonic);
+                let inner_result: Option<Vec<&str>> = if pub_key.is_some_and(|x| x.0 == target) {
+                    Some(new_mnemonic.to_vec())
+                } else {
+                    None
+                };
+
+                inner_result
             });
 
         result
     }
 
-    // fn factorial(n: u128) -> u128 {
-    //     (1..=n).product()
-    // }
+    fn factorial(n: u128) -> u128 {
+        (1..=n).product()
+    }
 
-    // fn count_combinations(n: u128, r: u128) -> u128 {
-    //     factorial(n) / (factorial(r) * factorial(n - r))
-    // }
+    fn count_combinations(n: u128, r: u128) -> u128 {
+        factorial(n) / (factorial(r) * factorial(n - r))
+    }
 
     #[pyfunction(name = "try_k_replacements")]
     pub fn py_try_k_replacements(
@@ -320,42 +339,27 @@ mod bt_crack {
             .try_into()
             .unwrap();
 
-        // let combos = count_combinations(MNEMONIC_SIZE as u128, k as u128)
-        //     * u128::pow(DICT_SIZE as u128, k as u32);
+        let combos: usize = count_combinations(MNEMONIC_SIZE as u128, k as u128) as usize
+            * usize::pow(DICT_SIZE, k as u32);
 
         let progress = Mutex::new(Progress::new());
-        
-        let outer_result = indices
-            .iter()
-            .combinations(k)
-            .par_bridge()
-            .find_map_any(| comb| {
-                let bar: Bar = progress.lock().unwrap().bar(
-                    usize::pow(DICT_SIZE, k as u32),
-                    "Trying combination",
-                );
+        let bar: Bar = progress.lock().unwrap().bar(combos, "Trying combination");
 
-                let result = loop_over_replaced_words(
-                    &dictionary,
-                    &mnemonic,
-                    &comb,
-                    target,
-                    &progress,
-                    &bar,
-                );
+        let outer_result = indices.iter().combinations(k).find_map(|comb| {
+            let result = iter_over_replaced_words(&dictionary, &mnemonic, &comb, target);
 
-                match result {
-                    Some(output) => {
-                        return Some(
-                            output
-                                .iter()
-                                .map(|&x| x.to_string())
-                                .collect::<Vec<String>>(),
-                        )
-                    }
-                    _ => None,
-                }
-            });
+            progress
+                .lock()
+                .unwrap()
+                .inc_and_draw(&bar, usize::pow(DICT_SIZE, k as u32));
+
+            result.map(|output| {
+                output
+                    .iter()
+                    .map(|&x| x.to_string())
+                    .collect::<Vec<String>>()
+            })
+        });
 
         Ok(outer_result)
     }
