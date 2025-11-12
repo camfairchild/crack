@@ -1,3 +1,10 @@
+# Crack
+This tool helps you crack a mnemonic.  
+Obviously mnemonics have *many* combinations so this is only helpful as a tool for recovery. 
+If you have written down your mnemonic slightly wrong, or missing a word, this tool can assist.
+
+This tool comes with no warranties. By using it you accept the license.
+
 # Instructions
 ## Install deps
 ```
