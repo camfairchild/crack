@@ -1,12 +1,12 @@
 [project]
 name = "bt-crack"
-version = "0.0.1a"
+version = "0.0.1b"
 description = "Attempt to crack the mnemonic"
 readme = "README.md"
 license = {file = "LICENSE"}
 keywords = ["substrate", "bittensor", "crypto"]
 
-dependencies = ["toml==0.10.0"]
+dependencies = ["toml==0.10.0", "tqdm==4.67.1", "substrate-interface==1.7.11"]
 requires-python = ">= 3.9"
 
 authors = [

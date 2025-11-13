@@ -114,7 +114,7 @@ mod bt_crack {
 
     use super::*;
 
-    const MNEMONIC_SIZE: usize = 12;
+    const MNEMONIC_SIZE: usize = 24;
     const DICT_SIZE: usize = 2048;
 
     fn to_pub_key(mnemonic: &[&str; MNEMONIC_SIZE]) -> Option<sr25519::Public> {
@@ -126,6 +126,20 @@ mod bt_crack {
         };
         let public = pair.public();
 
+        Some(public)
+    }
+
+    fn to_pub_key_with_derive(
+        mnemonic: &[&str; MNEMONIC_SIZE],
+        derivation_path: &str,
+    ) -> Option<sr25519::Public> {
+        let seed = format!("{}{}", mnemonic.join(" "), derivation_path);
+        let maybe_pair = sr25519::Pair::from_string(&seed, None);
+        let pair = match maybe_pair {
+            Ok(pair) => pair,
+            Err(_) => return None,
+        };
+        let public = pair.public();
         Some(public)
     }
 
@@ -166,6 +180,64 @@ mod bt_crack {
             }
         }
 
+        Ok(None)
+    }
+
+    #[pyfunction(name = "derive")]
+    pub fn py_derive(
+        dictionary: Vec<String>,
+        mnemonic: [String; MNEMONIC_SIZE],
+        target: [u8; 32],
+        start: u128,
+        batch_size: u128,
+        derive_length: u128,
+    ) -> PyResult<Option<String>> {
+        let mnemonic: &[&str; MNEMONIC_SIZE] = &mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+
+        let all_nums = "0123456789".chars().collect::<Vec<char>>();
+        let all_words: Vec<String> = dictionary
+            .iter()
+            .cloned()
+            .chain(all_nums.iter().map(|&x| x.to_string()))
+            .collect::<Vec<String>>();
+        let combos = all_words
+            .into_iter()
+            .combinations_with_replacement(derive_length as usize);
+
+        for combo in combos.skip(start as usize).take(batch_size as usize) {
+            let derivation_path: String = format!("//{}", combo.iter().join("/"));
+            println!("{}", derivation_path);
+
+            let pub_key = to_pub_key_with_derive(&mnemonic, &derivation_path);
+            if pub_key.is_some_and(|x| x.0 == target) {
+                return Ok(Some(derivation_path));
+            }
+        }
+
+        Ok(None)
+    }
+
+    #[pyfunction(name = "try_derive")]
+    pub fn py_try_derive(
+        mnemonic: [String; MNEMONIC_SIZE],
+        derivation_path: String,
+    ) -> PyResult<Option<String>> {
+        let mnemonic: &[&str; MNEMONIC_SIZE] = &mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+
+        let pub_key = to_pub_key_with_derive(&mnemonic, &derivation_path);
+        if let Some(inner) = pub_key {
+            return Ok(Some(inner.to_ss58check()));
+        }
         Ok(None)
     }
 
