@@ -35,5 +35,16 @@ def derive(
 def try_derive(
     mnemonic: List[str],
     derivation_path: str,
-) -> Optional[str]:
+) -> Optional[bytes]:
+    pass
+
+def loop_over_replaced_words(
+    dictionary: list[str],
+    mnemonic: list[str],
+    indices: list[int],
+    target: bytes, # public key bytes
+) -> Optional[list[str]]:
+    pass
+
+def to_pub_key_bytes(ss58_address: str) -> bytes:
     pass

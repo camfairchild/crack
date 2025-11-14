@@ -108,13 +108,14 @@ impl ExactSizeIterator for Iter {}
 #[pymodule(name = "bt_crack")]
 mod bt_crack {
     use linya::{Bar, Progress};
+    use pyo3::exceptions::PyValueError;
     use rayon::prelude::*;
-    use sp_core::crypto::Ss58Codec;
+    use sp_core::{crypto::Ss58Codec, ByteArray};
     use std::{iter::zip, sync::Mutex};
 
     use super::*;
 
-    const MNEMONIC_SIZE: usize = 24;
+    const MNEMONIC_SIZE: usize = 12;
     const DICT_SIZE: usize = 2048;
 
     fn to_pub_key(mnemonic: &[&str; MNEMONIC_SIZE]) -> Option<sr25519::Public> {
@@ -143,11 +144,31 @@ mod bt_crack {
         Some(public)
     }
 
+    fn to_keypair_with_derive(
+        mnemonic: &[&str; MNEMONIC_SIZE],
+        derivation_path: &str,
+    ) -> Option<sr25519::Pair> {
+        let seed = format!("{}{}", mnemonic.join(" "), derivation_path);
+        let maybe_pair = sr25519::Pair::from_string(&seed, None);
+        let pair = match maybe_pair {
+            Ok(pair) => pair,
+            Err(_) => return None,
+        };
+        Some(pair)
+    }
+
     #[allow(dead_code)]
     fn to_ss58_addr(mnemonic: &[&str; MNEMONIC_SIZE]) -> Option<String> {
         let public = to_pub_key(mnemonic)?;
 
         Some(public.to_ss58check())
+    }
+
+    #[pyfunction(name = "to_pub_key_bytes")]
+    pub fn py_to_pub_key_bytes(ss58_address: String) -> PyResult<Vec<u8>> {
+        let public = sr25519::Public::from_ss58check(&ss58_address)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(public.to_raw_vec())
     }
 
     #[pyfunction(name = "crack")]
@@ -226,7 +247,7 @@ mod bt_crack {
     pub fn py_try_derive(
         mnemonic: [String; MNEMONIC_SIZE],
         derivation_path: String,
-    ) -> PyResult<Option<String>> {
+    ) -> PyResult<Option<Vec<u8>>> {
         let mnemonic: &[&str; MNEMONIC_SIZE] = &mnemonic
             .iter()
             .map(|x| x.as_str())
@@ -234,9 +255,9 @@ mod bt_crack {
             .try_into()
             .unwrap();
 
-        let pub_key = to_pub_key_with_derive(&mnemonic, &derivation_path);
-        if let Some(inner) = pub_key {
-            return Ok(Some(inner.to_ss58check()));
+        let keypair = to_keypair_with_derive(&mnemonic, &derivation_path);
+        if let Some(inner) = keypair {
+            return Ok(Some(inner.to_raw_vec()));
         }
         Ok(None)
     }
@@ -280,10 +301,42 @@ mod bt_crack {
         Ok(None)
     }
 
+    #[pyfunction(name = "loop_over_replaced_words")]
+    pub fn py_loop_over_replaced_words(
+        dictionary: [String; DICT_SIZE],
+        mnemonic: [String; MNEMONIC_SIZE],
+        indices: Vec<usize>,
+        target: [u8; 32],
+    ) -> PyResult<Option<Vec<String>>> {
+        let dictionary = dictionary
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+        let mnemonic = mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+
+        let progress = Mutex::new(Progress::new());
+        let bar: Bar = progress
+            .lock()
+            .unwrap()
+            .bar(indices.len(), "Trying combination");
+
+        let result =
+            loop_over_replaced_words(&dictionary, &mnemonic, &indices, target, &progress, &bar);
+
+        Ok(result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>()))
+    }
+
     fn loop_over_replaced_word<'a>(
         dictionary: &[&'a str; 2048],
         mnemonic: &[&'a str; MNEMONIC_SIZE],
-        &index: &usize,
+        index: usize,
         target: [u8; 32],
         progress: &Mutex<Progress>,
         bar: &Bar,
@@ -316,7 +369,7 @@ mod bt_crack {
     fn loop_over_replaced_words<'a>(
         dictionary: &[&'a str; 2048],
         mnemonic: &[&'a str; MNEMONIC_SIZE],
-        indices: &[&usize],
+        indices: &[usize],
         target: [u8; 32],
         progress: &Mutex<Progress>,
         bar: &Bar,
@@ -327,7 +380,7 @@ mod bt_crack {
             );
         }
 
-        let &next_ind = indices[0];
+        let next_ind = indices[0];
         let new_indices = &indices[1..];
 
         let &replaced_word = &mnemonic[next_ind];
