@@ -91,12 +91,14 @@ chef chief
 clap claw clay clip
 claw clay law
 clay play day
-click clock
+clever fever never
+clinic click panic picnic
+click clock clinic
 climb limb
-clip flip
+clip flip hip tip whip clap clog
 clock flock lock
 cloud loud
-clog dog
+clog dog clip
 clutch dutch
 coach couch
 coast cost roast toast
@@ -169,7 +171,7 @@ fault vault
 feed feel need seed
 fee feed feel few flee
 feel fuel
-fever never
+fever never clever
 file film fine fire
 film firm
 find fine kind mind
@@ -230,11 +232,12 @@ hard yard
 hat that what
 have pave save wave
 health wealth
+height eight
 hen pen ten then when
 hero zero
 hill ill pill will
 hint hunt
-hip ship tip whip trip
+hip ship tip whip trip clip
 hire wire
 hold hole hood old
 hole home hope pole
@@ -246,6 +249,7 @@ humble tumble
 hunt hurt
 ice nice rice
 icon iron
+input output put
 ill pill will
 inject insect
 inner winner
@@ -271,10 +275,10 @@ left lift
 lend lens
 life lift like live wife
 lift list
-light night right sight slight
+light night right sight slight flight
 like live
 limb limit climb lamp
-limit limb link
+limit limb link omit admit submit
 link pink wink
 live love olive
 load loan loud road
@@ -301,8 +305,9 @@ math myth path
 mean meat
 meat melt seat
 medal metal
-metal medal
+menu venue
 mercy merry
+metal medal meat
 milk silk
 mix six
 moon soon
@@ -316,10 +321,10 @@ near pear wear year
 need seed
 nest net next test west
 net next nut pet wet
-never fever
+never fever clever
 next text
 nice rice
-night right sight
+night right sight tonight
 noise nose
 north worth
 nose note rose
@@ -327,22 +332,26 @@ note vote
 now snow
 nurse purse
 nut put
+ostrich rich
 once one
 one tone zone
 open oven pen
 orange range
+output input put
 oven over
 own town
 ozone zone
 paddle saddle
 page pave wage
 palace place
+panic picnic clinic
 patch path pitch
 pave save wave
 peace place
 pear wear year
 pen pet ten
 pet poet put wet
+picnic panic clinic
 pill pull will
 pink wink
 place plate
@@ -362,6 +371,7 @@ project protect
 proof roof
 pull pulp
 pulse purse
+put nut input output
 quit quiz suit
 race rack rare rate rice
 rack track
@@ -372,7 +382,7 @@ reason season
 rent tent
 rice rich ride
 ride ridge rude side tide wide
-right sight bright eight light night slight
+right sight bright eight light night slight flight
 ring sing wing
 roast toast
 roof room
@@ -399,7 +409,7 @@ shallow swallow
 share spare
 shell spell
 shift swift
-ship shop whip
+ship shop whip hip tip
 shock sock stock
 shoe shop shove
 shoot short
@@ -418,6 +428,7 @@ ski skin
 slab slam
 slam slim
 slice slide spice
+slight light flight sight
 slim swim
 slot slow spot
 slow snow
@@ -438,7 +449,7 @@ spice spike
 sport spot
 stable table
 staff stuff
-stage state
+stage state start tag age cage page wage
 stamp swamp
 stem step
 stick stock
@@ -453,6 +464,7 @@ swarm warm
 swear wear
 swing wing
 sword word
+tag stage bag
 talk tank task walk
 tank task thank
 tape type
@@ -467,9 +479,10 @@ then they when
 there three where
 three tree
 tide time wide
-tip top trip
+tip top trip hip
 toe tone top toy
 tone zone
+tonight night
 tool wool
 top toy
 toy try
@@ -479,8 +492,10 @@ tray try
 tree true
 trick truck
 trim trip
+trip trim tip top drip
 twin win
 use used
+venue menu
 verb very
 wage wave
 wait want
