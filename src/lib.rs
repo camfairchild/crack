@@ -517,8 +517,6 @@ mod bt_crack {
         mnemonic: &[&'a str; MNEMONIC_SIZE],
         target: [u8; 32],
     ) -> Option<Vec<String>> {
-        let indices = (1..mnemonic.len()).collect::<Vec<usize>>();
-
         // For each word in the mnemonic, get all the confused words for that word
         let confused_words_list = mnemonic
             .iter()
@@ -529,6 +527,9 @@ mod bt_crack {
                     .to_vec()
             })
             .collect::<Vec<Vec<String>>>();
+
+        let num_products: usize = confused_words_list.iter().map(|l| l.len()).product();
+        println!("Trying {} products of confused words...", num_products);
 
         // do a cartesian product over the list of confused words
         let result = confused_words_list
@@ -549,10 +550,9 @@ mod bt_crack {
                             return Some(new_mnemonic.to_vec());
                         }
                     };
-                    
+
                     None
                 };
-
 
                 inner_result
             });
