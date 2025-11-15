@@ -107,6 +107,7 @@ impl ExactSizeIterator for Iter {}
 
 #[pymodule(name = "bt_crack")]
 mod bt_crack {
+    use itertools::enumerate;
     use linya::{Bar, Progress};
     use pyo3::exceptions::PyValueError;
     use rayon::prelude::*;
@@ -493,7 +494,6 @@ mod bt_crack {
     pub fn py_confuse(
         confuse_words: Vec<Vec<String>>,
         mnemonic: Vec<String>,
-        k: usize,
         target: [u8; 32],
     ) -> PyResult<Option<Vec<String>>> {
         let mnemonic = mnemonic
@@ -508,72 +508,55 @@ mod bt_crack {
             confuse_words_tree.insert(first_word.clone(), confuse_word_list);
         }
 
-        let result = confuse(&confuse_words_tree, &mnemonic, k, target);
+        let result = confuse(&confuse_words_tree, &mnemonic, target);
         Ok(result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>()))
     }
 
     pub fn confuse<'a>(
         confuse_words: &BTreeMap<String, Vec<String>>,
         mnemonic: &[&'a str; MNEMONIC_SIZE],
-        k: usize,
         target: [u8; 32],
     ) -> Option<Vec<String>> {
         let indices = (1..mnemonic.len()).collect::<Vec<usize>>();
-        let combos: usize = count_combinations(MNEMONIC_SIZE as u128, k as u128) as usize
-            * usize::pow(DICT_SIZE, k as u32); // overesimate
 
-        let progress = Mutex::new(Progress::new());
-        let bar: Bar = progress.lock().unwrap().bar(combos, "Trying combination");
-
-        let outer_result = indices
+        // For each word in the mnemonic, get all the confused words for that word
+        let confused_words_list = mnemonic
             .iter()
-            .combinations(k)
+            .map(|&word| {
+                confuse_words
+                    .get(word)
+                    .unwrap_or(&vec![word.to_string()])
+                    .to_vec()
+            })
+            .collect::<Vec<Vec<String>>>();
+
+        // do a cartesian product over the list of confused words
+        let result = confused_words_list
+            .iter()
+            .multi_cartesian_product()
             .par_bridge()
-            .find_map_any(|comb| {
-                // Get all combinations of words from the confused words to replace with
-                // For each word being replace because of `comb`, get all the confused words for that word
-                let confused_words_list = comb
-                    .iter()
-                    .map(|&index| {
-                        let existing_word = mnemonic[*index];
-                        confuse_words
-                            .get(existing_word)
-                            .unwrap_or(&vec![existing_word.to_string()])
-                            .to_vec()
-                    })
-                    .collect::<Vec<Vec<String>>>();
+            .find_map_any(|prod| {
+                let mut new_mnemonic = *mnemonic;
+                for (index, &new_word) in enumerate(prod.iter()) {
+                    new_mnemonic[index] = new_word;
+                }
 
-                // do a set product
-                let result = confused_words_list
-                    .iter()
-                    .multi_cartesian_product()
-                    .par_bridge()
-                    .find_map_any(|prod| {
-                        let mut new_mnemonic = *mnemonic;
-                        for (&index, &new_word) in zip(comb.iter(), prod.iter()) {
-                            new_mnemonic[*index] = new_word;
+                let maybe_pub_key = to_pub_key(&new_mnemonic);
+                let inner_result: Option<Vec<&str>> = {
+                    if let Some(pub_key) = maybe_pub_key {
+                        //println!("Got pub key: {:?}", pub_key.to_ss58check());
+                        if pub_key.0 == target {
+                            return Some(new_mnemonic.to_vec());
                         }
+                    };
+                    
+                    None
+                };
 
-                        let pub_key = to_pub_key(&new_mnemonic);
-                        let inner_result: Option<Vec<&str>> =
-                            if pub_key.is_some_and(|x| x.0 == target) {
-                                Some(new_mnemonic.to_vec())
-                            } else {
-                                None
-                            };
 
-                        // Increment the progress bar
-                        progress.lock().unwrap().inc(&bar, 1);
-
-                        inner_result
-                    });
-
-                // Draw the progress bar
-                progress.lock().unwrap().draw(&bar);
-
-                result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>())
+                inner_result
             });
 
-        outer_result
+        result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>())
     }
 }
