@@ -234,7 +234,7 @@ hen pen ten then when
 hero zero
 hill ill pill will
 hint hunt
-hip ship tip whip
+hip ship tip whip trip
 hire wire
 hold hole hood old
 hole home hope pole
@@ -273,6 +273,8 @@ life lift like live wife
 lift list
 light night right sight slight
 like live
+limb limit climb lamp
+limit limb link
 link pink wink
 live love olive
 load loan loud road
@@ -299,6 +301,7 @@ math myth path
 mean meat
 meat melt seat
 medal metal
+metal medal
 mercy merry
 milk silk
 mix six
@@ -313,6 +316,7 @@ near pear wear year
 need seed
 nest net next test west
 net next nut pet wet
+never fever
 next text
 nice rice
 night right sight
@@ -368,7 +372,7 @@ reason season
 rent tent
 rice rich ride
 ride ridge rude side tide wide
-right sight
+right sight bright eight light night slight
 ring sing wing
 roast toast
 roof room

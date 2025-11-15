@@ -48,3 +48,11 @@ def loop_over_replaced_words(
 
 def to_pub_key_bytes(ss58_address: str) -> bytes:
     pass
+
+def confuse(
+    confuse_words: list[list[str]],
+    mnemonic: list[str],
+    k: int,
+    target: bytes,
+) -> Optional[list[str]]:
+    pass

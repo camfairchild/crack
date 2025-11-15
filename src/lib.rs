@@ -111,7 +111,7 @@ mod bt_crack {
     use pyo3::exceptions::PyValueError;
     use rayon::prelude::*;
     use sp_core::{crypto::Ss58Codec, ByteArray};
-    use std::{iter::zip, sync::Mutex};
+    use std::{collections::BTreeMap, iter::zip, sync::Mutex};
 
     use super::*;
 
@@ -487,5 +487,93 @@ mod bt_crack {
         });
 
         Ok(outer_result)
+    }
+
+    #[pyfunction(name = "confuse")]
+    pub fn py_confuse(
+        confuse_words: Vec<Vec<String>>,
+        mnemonic: Vec<String>,
+        k: usize,
+        target: [u8; 32],
+    ) -> PyResult<Option<Vec<String>>> {
+        let mnemonic = mnemonic
+            .iter()
+            .map(|x| x.as_str())
+            .collect::<Vec<&str>>()
+            .try_into()
+            .unwrap();
+        let mut confuse_words_tree: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for confuse_word_list in confuse_words {
+            let first_word = &confuse_word_list[0];
+            confuse_words_tree.insert(first_word.clone(), confuse_word_list);
+        }
+
+        let result = confuse(&confuse_words_tree, &mnemonic, k, target);
+        Ok(result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>()))
+    }
+
+    pub fn confuse<'a>(
+        confuse_words: &BTreeMap<String, Vec<String>>,
+        mnemonic: &[&'a str; MNEMONIC_SIZE],
+        k: usize,
+        target: [u8; 32],
+    ) -> Option<Vec<String>> {
+        let indices = (1..mnemonic.len()).collect::<Vec<usize>>();
+        let combos: usize = count_combinations(MNEMONIC_SIZE as u128, k as u128) as usize
+            * usize::pow(DICT_SIZE, k as u32); // overesimate
+
+        let progress = Mutex::new(Progress::new());
+        let bar: Bar = progress.lock().unwrap().bar(combos, "Trying combination");
+
+        let outer_result = indices
+            .iter()
+            .combinations(k)
+            .par_bridge()
+            .find_map_any(|comb| {
+                // Get all combinations of words from the confused words to replace with
+                // For each word being replace because of `comb`, get all the confused words for that word
+                let confused_words_list = comb
+                    .iter()
+                    .map(|&index| {
+                        let existing_word = mnemonic[*index];
+                        confuse_words
+                            .get(existing_word)
+                            .unwrap_or(&vec![existing_word.to_string()])
+                            .to_vec()
+                    })
+                    .collect::<Vec<Vec<String>>>();
+
+                // do a set product
+                let result = confused_words_list
+                    .iter()
+                    .multi_cartesian_product()
+                    .par_bridge()
+                    .find_map_any(|prod| {
+                        let mut new_mnemonic = *mnemonic;
+                        for (&index, &new_word) in zip(comb.iter(), prod.iter()) {
+                            new_mnemonic[*index] = new_word;
+                        }
+
+                        let pub_key = to_pub_key(&new_mnemonic);
+                        let inner_result: Option<Vec<&str>> =
+                            if pub_key.is_some_and(|x| x.0 == target) {
+                                Some(new_mnemonic.to_vec())
+                            } else {
+                                None
+                            };
+
+                        // Increment the progress bar
+                        progress.lock().unwrap().inc(&bar, 1);
+
+                        inner_result
+                    });
+
+                // Draw the progress bar
+                progress.lock().unwrap().draw(&bar);
+
+                result.map(|x| x.iter().map(|x| x.to_string()).collect::<Vec<String>>())
+            });
+
+        outer_result
     }
 }
